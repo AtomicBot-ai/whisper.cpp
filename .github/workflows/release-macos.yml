@@ -1,0 +1,54 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_METAL=ON \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DWHISPER_COREML=ON \
+            -DWHISPER_COREML_ALLOW_FALLBACK=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=ON
+
+      - name: Build
+        run: cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+
+      - name: Package
+        run: |
+          mkdir -p package
+          cp build/bin/whisper-cli    package/
+          cp build/bin/whisper-server package/
+          cp build/bin/whisper-bench  package/
+          cp build/bin/whisper-quantize package/
+
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          cd package
+          zip -r "../whisper-${TAG_NAME}-macos-arm64.zip" .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: whisper-*.zip
+          draft: true
+          generate_release_notes: true
